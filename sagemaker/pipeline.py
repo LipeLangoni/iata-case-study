@@ -22,7 +22,7 @@ http_url = ParameterString(name="HttpUrl", default_value="https://eforexcel.com/
 s3_bucket = ParameterString(name="S3Bucket", default_value=get_terraform_output("bucket_name"))
 s3_prefix_raw = ParameterString(name="S3PrefixRaw", default_value="lnd/")
 s3_prefix_unzipped = ParameterString(name="S3PrefixUnzipped", default_value="raw/")
-s3_prefix_converted = ParameterString(name="S3PrefixConverted", default_value="trusted/")
+s3_prefix_converted = ParameterString(name="S3PrefixConverted", default_value="trd/")
 
 fetch_data_processor = ScriptProcessor(
     image_uri=image_uri,
