@@ -6,7 +6,10 @@ resource "aws_iam_role" "sagemaker_execution_role" {
       {
         Effect = "Allow",
         Principal = {
-          Service = "sagemaker.amazonaws.com"
+          Service = [
+            "sagemaker.amazonaws.com",
+            "states.amazonaws.com"
+          ]
         },
         Action = "sts:AssumeRole"
       }
@@ -19,18 +22,40 @@ resource "aws_iam_policy" "sagemaker_policy" {
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
+      # Existing permissions
       {
         Effect = "Allow",
         Action = [
           "s3:*",
           "glue:*",
-          "athena:*"
+          "athena:*",
+          "sagemaker:AddTags",
+          "sagemaker:CreateProcessingJob"
+        ],
+        Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = "iam:PassRole",
+        Resource = [
+          "arn:aws:iam::995227787260:role/sagemaker_execution_role",
+          "arn:aws:iam::995227787260:role/sagemaker-pipeline-*"
+        ]
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer"
         ],
         Resource = "*"
       }
     ]
   })
 }
+
 
 resource "aws_iam_role_policy_attachment" "sagemaker_role_policy_attachment" {
   role       = aws_iam_role.sagemaker_execution_role.name
