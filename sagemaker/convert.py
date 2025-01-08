@@ -40,6 +40,6 @@ if __name__ == "__main__":
         [col(column).alias(column.replace(" ", "_")) for column in df.columns]
     )
     # Convert the DataFrame to Parquet and partition by 'Country'
-    df.write.partitionBy("Country").parquet(output_path)
+    df.write.mode("overwrite").partitionBy("Country").parquet(output_path)
 
     print(f"Data has been successfully processed and saved to {output_path}")

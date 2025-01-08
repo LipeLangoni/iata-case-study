@@ -1,5 +1,9 @@
 ![Animation](assets/iata.drawio.png)
 
+# IATA Case Study Project
+
+This project automates the data processing workflow using Amazon SageMaker Pipelines and AWS services like S3, Glue, and Athena. The steps include fetching a zipped dataset from a URL, unzipping it, converting CSV to Parquet with partitioning, and setting up an Athena database for querying the processed data.
+
 
 ## Project Overview
 
@@ -44,20 +48,49 @@ The third step reads the unzipped CSV file, converts it to Parquet format, and p
 ### 4. Create Glue Athena Database
 The final step in the pipeline creates a Glue Athena database that allows querying the transformed data stored in the `trd` zone.
 
-## Deployment
+## Terraform Setup
 
-1. **Terraform**: Use Terraform scripts to define and deploy the necessary AWS infrastructure (S3, SageMaker, Glue, CloudWatch) as well as creates the necessary role and policy attachments.
-2. **Python SDK**: Deploy the SageMaker pipeline using the Python SDK (`boto3`).
+Navigate to the `terraform` directory and run the following commands to set up the AWS infrastructure:
+
+```
+cd terraform
+```
+
+```
+terraform init -backend-config="bucket=<your-s3-bucket-name>" -backend-config="key=terraform/state" -backend-config="region=<your-region>" && terraform apply
+```
+
+This will create:
+- S3 buckets for different data zones (lnd, raw, trd)
+- SageMaker role with necessary permissions
+- CloudWatch log group for SageMaker Processing Job logs
+
+---
+
+## Running the SageMaker Pipeline
+
+Navigate to the `sagemaker` directory and run the pipeline using the following command:
+
+```
+cd sagemaker
+```
+
+```
+python3 pipeline.py
+```
+
+This script deploys the SageMaker Pipeline that:
+1. Fetches the zipped dataset from the URL and stores it in the S3 `lnd` zone.
+2. Unzips the dataset and saves the extracted files in the S3 `raw` zone.
+3. Converts the extracted CSV to Parquet, partitions it by `Country`, and saves it in the S3 `trd` zone.
+4. Creates an Athena database and table for querying the processed data.
+
+Each step depends on the previous one, in the above order.
+
+---
 
 ## Logs & Monitoring
 All logs for the SageMaker processing jobs are stored in CloudWatch, which provides insights into job progress and any errors that might occur.
-
-## Usage
-
-1. Clone this repository to your local machine.
-2. Modify the Terraform scripts with your AWS credentials and specific configurations.
-3. Use the Python SDK to deploy the SageMaker pipeline.
-4. Monitor the progress of the jobs in CloudWatch.
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

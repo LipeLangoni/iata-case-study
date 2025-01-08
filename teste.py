@@ -1,42 +1,10 @@
-import boto3
+import pyarrow.dataset as ds
 
-sagemaker_client = boto3.client("sagemaker")
+# Path to the parent folder containing all partitions
+parent_folder_path = "s3://iata-test-data/trd/"
 
-pipeline_name = "DataProcessingPipeline"
-response = sagemaker_client.list_pipeline_executions(
-    PipelineName=pipeline_name, MaxResults=1
-)
+# Read the dataset with partitioning enabled
+dataset = ds.dataset(parent_folder_path, format="parquet", partitioning="hive")
 
-execution_arn = response["PipelineExecutionSummaries"][0]["PipelineExecutionArn"]
-response = sagemaker_client.list_pipeline_execution_steps(
-    PipelineExecutionArn=execution_arn
-)
-
-fetch_data_step = next(
-    (
-        step
-        for step in response["PipelineExecutionSteps"]
-        if step["StepName"] == "FetchDataStep"
-    ),
-    None,
-)
-
-if fetch_data_step:
-    processing_job_arn = fetch_data_step["Metadata"]["ProcessingJob"]["Arn"]
-    print(f"Fetching details for Processing Job: {processing_job_arn}")
-
-    # Get the processing job details
-    processing_job_details = sagemaker_client.describe_processing_job(
-        ProcessingJobName=processing_job_arn.split("/")[-1]
-    )
-
-    # Print relevant information
-    print("Status:", processing_job_details["ProcessingJobStatus"])
-    if "FailureReason" in processing_job_details:
-        print("Failure Reason:", processing_job_details["FailureReason"])
-    print(
-        "Processing Job Logs URL:",
-        processing_job_details["ProcessingJobAppSpecification"]["ContainerEntrypoint"],
-    )
-else:
-    print("FetchDataStep not found.")
+# Print the schema of the dataset
+print(dataset.schema)

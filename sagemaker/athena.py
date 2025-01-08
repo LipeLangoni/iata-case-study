@@ -1,80 +1,132 @@
 import boto3
-import time
-
-# Athena and S3 configurations
-athena_client = boto3.client("athena")
-s3_bucket = "iata-test-data"
-s3_prefix_converted = "trd/"
-database_name = "iata_athena_db"
-table_name = "sales_data"
+from botocore.exceptions import ClientError
+import subprocess
 
 
-def execute_athena_query(query):
-    response = athena_client.start_query_execution(
-        QueryString=query,
-        QueryExecutionContext={"Database": database_name},
-        ResultConfiguration={"OutputLocation": f"s3://{s3_bucket}/athena-results/"},
+def get_terraform_output(output_name):
+    result = subprocess.run(
+        ["terraform", "output", "-raw", output_name],
+        stdout=subprocess.PIPE,
+        cwd="../terraform",
     )
-    query_execution_id = response["QueryExecutionId"]
-
-    while True:
-        status_response = athena_client.get_query_execution(
-            QueryExecutionId=query_execution_id
-        )
-        status = status_response["QueryExecution"]["Status"]["State"]
-        if status in ["SUCCEEDED", "FAILED"]:
-            break
-        time.sleep(2)
-
-    if status == "FAILED":
-        error_message = status_response["QueryExecution"]["Status"]["StateChangeReason"]
-        raise Exception(
-            f"Athena query failed with status: {status}. Reason: {error_message}"
-        )
-
-    print("Query succeeded!")
+    return result.stdout.decode("utf-8").strip()
 
 
-def create_athena_database():
-    create_db_query = f"CREATE DATABASE IF NOT EXISTS {database_name};"
-    execute_athena_query(create_db_query)
-
-
-def create_athena_table():
-    create_table_query = f"""
-    CREATE EXTERNAL TABLE IF NOT EXISTS sales_data (
-      region STRING,
-      item_type STRING,
-      sales_channel STRING,
-      order_priority STRING,
-      order_date STRING,
-      order_id BIGINT,
-      ship_date STRING,
-      units_sold INT,
-      unit_price FLOAT,
-      unit_cost FLOAT,
-      total_revenue FLOAT,
-      total_cost FLOAT,
-      total_profit FLOAT
-    )
-    PARTITIONED BY (country STRING)
-    STORED AS PARQUET
-    LOCATION 's3://{s3_bucket}/{s3_prefix_converted}';
+def create_glue_database_and_table(
+    database_name, table_name, s3_path, region_name="us-east-1"
+):
     """
-    execute_athena_query(create_table_query)
-
-
-def add_partitions():
-    add_partition_query = """
-    MSCK REPAIR TABLE sales_data;
+    Create a Glue database, table, and crawler for partitioned parquet data
     """
-    execute_athena_query(add_partition_query)
+    # Get IAM role ARN from Terraform
+    iam_role_arn = get_terraform_output("glue_role_arn")
+    if not iam_role_arn:
+        raise ValueError("Could not get IAM role ARN from Terraform output")
+
+    # Initialize Glue client
+    glue_client = boto3.client("glue", region_name=region_name)
+
+    try:
+        # Step 1: Create Database
+        print(f"Creating database: {database_name}")
+        try:
+            glue_client.create_database(
+                DatabaseInput={
+                    "Name": database_name,
+                    "Description": "Database for IATA test data",
+                }
+            )
+            print(f"Database {database_name} created successfully")
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "AlreadyExistsException":
+                print(f"Database {database_name} already exists")
+            else:
+                raise
+
+        # Step 2: Create Table
+        print(f"Creating table: {table_name}")
+        try:
+            glue_client.create_table(
+                DatabaseName=database_name,
+                TableInput={
+                    "Name": table_name,
+                    "StorageDescriptor": {
+                        "Columns": [
+                            {"Name": "transaction_id", "Type": "string"},
+                            {"Name": "amount", "Type": "double"},
+                            {"Name": "date_time", "Type": "timestamp"},
+                        ],
+                        "Location": s3_path,
+                        "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+                        "OutputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+                        "SerdeInfo": {
+                            "SerializationLibrary": "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+                            "Parameters": {"serialization.format": "1"},
+                        },
+                    },
+                    "PartitionKeys": [{"Name": "Country", "Type": "string"}],
+                    "TableType": "EXTERNAL_TABLE",
+                    "Parameters": {
+                        "classification": "parquet",
+                        "has_encrypted_data": "false",
+                        "parquet.compression": "SNAPPY",
+                    },
+                },
+            )
+            print(f"Table {table_name} created successfully")
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "AlreadyExistsException":
+                print(f"Table {table_name} already exists")
+            else:
+                raise
+
+        # Step 3: Create Crawler
+        crawler_name = f"{database_name}_{table_name}_crawler"
+        print(f"Creating crawler: {crawler_name}")
+
+        try:
+            glue_client.create_crawler(
+                Name=crawler_name,
+                Role=iam_role_arn,
+                DatabaseName=database_name,
+                Targets={"S3Targets": [{"Path": s3_path}]},
+                TablePrefix="",
+                SchemaChangePolicy={
+                    "UpdateBehavior": "UPDATE_IN_DATABASE",
+                    "DeleteBehavior": "LOG",
+                },
+                RecrawlPolicy={"RecrawlBehavior": "CRAWL_EVERYTHING"},
+            )
+            print(f"Crawler {crawler_name} created successfully")
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "AlreadyExistsException":
+                print(f"Crawler {crawler_name} already exists")
+            else:
+                raise
+
+        # Step 4: Start Crawler
+        print(f"Starting crawler: {crawler_name}")
+        glue_client.start_crawler(Name=crawler_name)
+
+        print("\nSetup completed successfully!")
+        print("Note: Crawler is running and may take several minutes to complete.")
+        print("You can check the crawler status in the AWS Glue Console or run:")
+        print(f"aws glue get-crawler --name {crawler_name}")
+
+    except Exception as e:
+        print(f"Error occurred: {e}")
+        raise
 
 
 if __name__ == "__main__":
-    print("Creating Athena database...")
-    create_athena_database()
-    print("Creating Athena table...")
-    create_athena_table()
-    print("Adding partitions...")
-    add_partitions()
+    DATABASE_NAME = "iata_test_db"
+    TABLE_NAME = "trd_table"
+    S3_PATH = "s3://iata-test-data/trd/"
+    REGION = "us-east-1"
+
+    create_glue_database_and_table(
+        database_name=DATABASE_NAME,
+        table_name=TABLE_NAME,
+        s3_path=S3_PATH,
+        region_name=REGION,
+    )
