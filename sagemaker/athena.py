@@ -1,25 +1,15 @@
 import boto3
 from botocore.exceptions import ClientError
-import subprocess
-
-
-def get_terraform_output(output_name):
-    result = subprocess.run(
-        ["terraform", "output", "-raw", output_name],
-        stdout=subprocess.PIPE,
-        cwd="../terraform",
-    )
-    return result.stdout.decode("utf-8").strip()
 
 
 def create_glue_database_and_table(
-    database_name, table_name, s3_path, region_name="us-east-1"
+    database_name, table_name, s3_path, role, region_name="us-east-1"
 ):
     """
     Create a Glue database, table, and crawler for partitioned parquet data
     """
     # Get IAM role ARN from Terraform
-    iam_role_arn = get_terraform_output("glue_role_arn")
+    iam_role_arn = role
     if not iam_role_arn:
         raise ValueError("Could not get IAM role ARN from Terraform output")
 
@@ -119,6 +109,12 @@ def create_glue_database_and_table(
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Create Athena Db")
+    parser.add_argument("--role", required=True, help="Name of the S3 bucket")
+    args = parser.parse_args()
+
     DATABASE_NAME = "iata_test_db"
     TABLE_NAME = "trd_table"
     S3_PATH = "s3://iata-test-data/trd/"
@@ -128,5 +124,6 @@ if __name__ == "__main__":
         database_name=DATABASE_NAME,
         table_name=TABLE_NAME,
         s3_path=S3_PATH,
+        role=args.role,
         region_name=REGION,
     )

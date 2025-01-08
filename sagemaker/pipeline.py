@@ -155,6 +155,7 @@ athena_processing_step = ProcessingStep(
     inputs=[athena_input],
     code="athena.py",
     depends_on=[spark_step.name],
+    job_arguments=["--role", get_terraform_output("glue_role_arn")],
 )
 
 pipeline = Pipeline(
