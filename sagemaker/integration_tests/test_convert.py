@@ -4,15 +4,15 @@ import zipfile
 import boto3
 
 def get_terraform_output(output_name):
-    result = subprocess.run(["terraform", "output", "-raw", output_name], stdout=subprocess.PIPE, check=True, cwd="../terraform")
+    result = subprocess.run(["terraform", "output", "-raw", output_name], stdout=subprocess.PIPE, check=True, cwd="../../terraform")
     return result.stdout.decode("utf-8").strip()
 
 def test_script_execution():
     s3_bucket = get_terraform_output("bucket_name")
-    input_key = 'lnd/output_data.zip'
-    output_prefix = 'raw/'
+    input_key = 'raw/2m Sales Records.csv'
+    output_prefix = 'trd/'
     result = subprocess.run(
-        ['python3', 'unzip.py', '--bucket_name', s3_bucket, '--input_key', input_key, '--output_prefix', output_prefix],
+        ['python3', '../convert.py', '--s3_bucket', s3_bucket, '--input_key', input_key, '--output_prefix', output_prefix],
         capture_output=True,
         text=True
     )

@@ -4,7 +4,7 @@ import zipfile
 import boto3
 
 def get_terraform_output(output_name):
-    result = subprocess.run(["terraform", "output", "-raw", output_name], stdout=subprocess.PIPE,check=True,cwd="../terraform")
+    result = subprocess.run(["terraform", "output", "-raw", output_name], stdout=subprocess.PIPE,check=True,cwd="../../terraform")
     return result.stdout.decode("utf-8").strip()
 
 def test_script_execution():
@@ -13,7 +13,7 @@ def test_script_execution():
     s3_prefix = 'lnd/'
     
     result = subprocess.run(
-        ['python3', 'fetch.py', '--http_url', http_url, '--s3_bucket', s3_bucket, '--s3_prefix', s3_prefix],
+        ['python3', '../fetch.py', '--http_url', http_url, '--s3_bucket', s3_bucket, '--s3_prefix', s3_prefix],
         capture_output=True,
         text=True
     )
