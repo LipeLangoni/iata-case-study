@@ -1,4 +1,4 @@
-![Animation](assets/iata2.png)
+![Animation](assets/iata.drawio.png)
 
 
 ## Project Overview
@@ -15,7 +15,6 @@ The pipeline automates the following tasks:
 - AWS Account with appropriate permissions to create and manage S3, SageMaker, Glue, and CloudWatch resources.
 - Terraform for managing AWS infrastructure.
 - Python and AWS SDK (Boto3) for interacting with AWS services.
-- SageMaker Notebook or AWS environment to run the pipeline.
 
 ## Architecture
 
@@ -47,7 +46,7 @@ The final step in the pipeline creates a Glue Athena database that allows queryi
 
 ## Deployment
 
-1. **Terraform**: Use Terraform scripts to define and deploy the necessary AWS infrastructure (S3, SageMaker, Glue, CloudWatch).
+1. **Terraform**: Use Terraform scripts to define and deploy the necessary AWS infrastructure (S3, SageMaker, Glue, CloudWatch) as well as creates the necessary role and policy attachments.
 2. **Python SDK**: Deploy the SageMaker pipeline using the Python SDK (`boto3`).
 
 ## Logs & Monitoring

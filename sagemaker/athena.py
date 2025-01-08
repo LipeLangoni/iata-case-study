@@ -2,11 +2,12 @@ import boto3
 import time
 
 # Athena and S3 configurations
-athena_client = boto3.client('athena')
+athena_client = boto3.client("athena")
 s3_bucket = "iata-test-data"
 s3_prefix_converted = "trd/"
 database_name = "iata_athena_db"
 table_name = "sales_data"
+
 
 def execute_athena_query(query):
     response = athena_client.start_query_execution(
@@ -17,7 +18,9 @@ def execute_athena_query(query):
     query_execution_id = response["QueryExecutionId"]
 
     while True:
-        status_response = athena_client.get_query_execution(QueryExecutionId=query_execution_id)
+        status_response = athena_client.get_query_execution(
+            QueryExecutionId=query_execution_id
+        )
         status = status_response["QueryExecution"]["Status"]["State"]
         if status in ["SUCCEEDED", "FAILED"]:
             break
@@ -25,13 +28,17 @@ def execute_athena_query(query):
 
     if status == "FAILED":
         error_message = status_response["QueryExecution"]["Status"]["StateChangeReason"]
-        raise Exception(f"Athena query failed with status: {status}. Reason: {error_message}")
+        raise Exception(
+            f"Athena query failed with status: {status}. Reason: {error_message}"
+        )
 
     print("Query succeeded!")
+
 
 def create_athena_database():
     create_db_query = f"CREATE DATABASE IF NOT EXISTS {database_name};"
     execute_athena_query(create_db_query)
+
 
 def create_athena_table():
     create_table_query = f"""
@@ -56,11 +63,13 @@ def create_athena_table():
     """
     execute_athena_query(create_table_query)
 
+
 def add_partitions():
-    add_partition_query = f"""
+    add_partition_query = """
     MSCK REPAIR TABLE sales_data;
     """
     execute_athena_query(add_partition_query)
+
 
 if __name__ == "__main__":
     print("Creating Athena database...")
