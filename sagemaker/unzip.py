@@ -37,10 +37,10 @@ if __name__ == "__main__":
 
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Unzip an S3 object and save the contents back to S3.")
-    parser.add_argument("--bucket_name", required=True, help="Name of the S3 bucket")
+    parser.add_argument("--s3_bucket", required=True, help="Name of the S3 bucket")
     parser.add_argument("--input_key", required=True, help="S3 key of the zip file")
     parser.add_argument("--output_prefix", required=True, help="S3 prefix for unzipped files")
     args = parser.parse_args()
 
     # Run the unzip function
-    unzip_s3_object(args.bucket_name, args.input_key, args.output_prefix)
+    unzip_s3_object(args.s3_bucket, args.input_key, args.output_prefix)

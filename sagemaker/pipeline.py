@@ -1,7 +1,7 @@
 import sagemaker
 from sagemaker.workflow.pipeline import Pipeline
 from sagemaker.workflow.steps import ProcessingStep
-from sagemaker.processing import ScriptProcessor
+from sagemaker.processing import ScriptProcessor,ProcessingJob
 from sagemaker.sklearn.processing import SKLearnProcessor
 from sagemaker.workflow.parameters import ParameterString
 from sagemaker.workflow.step_collections import RegisterModel
@@ -28,7 +28,21 @@ s3_prefix_raw = ParameterString(name="S3PrefixRaw", default_value="lnd/")
 s3_prefix_unzipped = ParameterString(name="S3PrefixUnzipped", default_value="raw/")
 s3_prefix_converted = ParameterString(name="S3PrefixConverted", default_value="trd/")
 
-script_processor = SKLearnProcessor(
+fetch_processor = SKLearnProcessor(
+    framework_version="1.2-1",
+    role=role,
+    instance_count=1,
+    instance_type="ml.t3.medium",
+    command=["python3"]
+)
+unzip_processor = SKLearnProcessor(
+    framework_version="1.2-1",
+    role=role,
+    instance_count=1,
+    instance_type="ml.t3.medium",
+    command=["python3"]
+)
+athena_processor = SKLearnProcessor(
     framework_version="1.2-1",
     role=role,
     instance_count=1,
@@ -40,14 +54,17 @@ spark_processor = PySparkProcessor(
     base_job_name="spark-preprocessor",
     framework_version="2.4",
     role=role,
-    instance_count=2,
-    instance_type="ml.t3.medium",
-    max_runtime_in_seconds=1200,
+    instance_count=1,
+    instance_type="ml.t3.large",
+    max_runtime_in_seconds=1200
 )
+
+log_group = "/aws/sagemaker/pipelines"
+log_stream = "pipeline-execution"
 
 fetch_data_step = ProcessingStep(
     name="FetchDataStep",
-    processor=script_processor,
+    processor=fetch_processor,
     inputs=[],
     outputs=[],
     job_arguments=[
@@ -58,9 +75,10 @@ fetch_data_step = ProcessingStep(
     code="fetch.py"
 )
 
+# Unzip Data Step - Depends on FetchDataStep
 unzip_data_step = ProcessingStep(
     name="UnzipDataStep",
-    processor=script_processor,
+    processor=unzip_processor,
     inputs=[],
     outputs=[],
     job_arguments=[
@@ -68,10 +86,10 @@ unzip_data_step = ProcessingStep(
         "--input_key", 'lnd/output_data.zip',
         "--output_prefix", s3_prefix_unzipped
     ],
-    depends_on=[fetch_data_step.name],
     code="unzip.py"
 )
 
+# Spark Processing Step - Depends on UnzipDataStep
 spark_step = ProcessingStep(
     name="SparkProcessingStep",
     processor=spark_processor,
@@ -80,16 +98,16 @@ spark_step = ProcessingStep(
         '--s3_bucket', s3_bucket,
         '--input_key', 'raw/2m Sales Records.csv',
         '--output_prefix', s3_prefix_converted
-    ],
-    depends_on=[unzip_data_step.name]
+    ]
 )
 
+# Athena Processing Step - Depends on SparkProcessingStep
 athena_processing_step = ProcessingStep(
     name="RunAthenaQuery",
-    processor=script_processor,
-    code='athena.py',
-    depends_on=[spark_step.name]
+    processor=athena_processor,
+    code='athena.py'
 )
+
 
 pipeline = Pipeline(
     name="DataProcessingPipeline",
