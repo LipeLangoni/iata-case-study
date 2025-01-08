@@ -8,7 +8,7 @@ from sagemaker.workflow.step_collections import RegisterModel
 from sagemaker.spark.processing import PySparkProcessor
 from sagemaker.processing import ProcessingInput, ProcessingOutput
 import subprocess
-
+from sagemaker.workflow.functions import Join
 
 def get_terraform_output(output_name):
     result = subprocess.run(["terraform", "output", "-raw", output_name], stdout=subprocess.PIPE, cwd="../terraform")
@@ -62,52 +62,81 @@ spark_processor = PySparkProcessor(
 log_group = "/aws/sagemaker/pipelines"
 log_stream = "pipeline-execution"
 
+fetch_output = ProcessingOutput(
+    output_name="fetch_output",
+    source="/opt/ml/processing/output",
+    destination=Join(
+        on='',
+        values=['s3://', s3_bucket, '/', s3_prefix_raw]
+    )
+)
+
 fetch_data_step = ProcessingStep(
     name="FetchDataStep",
     processor=fetch_processor,
-    inputs=[],
-    outputs=[],
-    job_arguments=[
-        "--http_url", http_url,
-        "--s3_bucket", s3_bucket,
-        "--s3_prefix", s3_prefix_raw
-    ],
+    outputs=[fetch_output],
+    job_arguments=["--http_url", http_url, "--s3_bucket", s3_bucket, "--s3_prefix", s3_prefix_raw],
     code="fetch.py"
 )
 
-# Unzip Data Step - Depends on FetchDataStep
+unzip_input = ProcessingInput(
+    source=fetch_output.destination,  # This ensures the input matches the previous output exactly
+    destination="/opt/ml/processing/input"
+)
+unzip_output = ProcessingOutput(
+    output_name="unzip_output",
+    source="/opt/ml/processing/output",
+    destination=Join(
+        on='',
+        values=['s3://', s3_bucket, '/', s3_prefix_unzipped]
+    )
+)
+
 unzip_data_step = ProcessingStep(
     name="UnzipDataStep",
     processor=unzip_processor,
-    inputs=[],
-    outputs=[],
-    job_arguments=[
-        "--s3_bucket", s3_bucket,
-        "--input_key", 'lnd/output_data.zip',
-        "--output_prefix", s3_prefix_unzipped
-    ],
-    code="unzip.py"
+    inputs=[unzip_input],
+    outputs=[unzip_output],
+    job_arguments=["--s3_bucket", s3_bucket, "--input_key", 'lnd/output_data.zip', "--output_prefix", s3_prefix_unzipped],
+    code="unzip.py",
+    depends_on=[fetch_data_step.name]
 )
 
-# Spark Processing Step - Depends on UnzipDataStep
+spark_input = ProcessingInput(
+    source=unzip_output.destination,  # This ensures the input matches the previous output exactly
+    destination="/opt/ml/processing/input"
+)
+spark_output = ProcessingOutput(
+    output_name="spark_output",
+    source="/opt/ml/processing/output",
+    destination=Join(
+        on='',
+        values=['s3://', s3_bucket, '/', s3_prefix_converted]
+    )
+)
+
 spark_step = ProcessingStep(
     name="SparkProcessingStep",
     processor=spark_processor,
-    code="convert.py",  
-    job_arguments=[
-        '--s3_bucket', s3_bucket,
-        '--input_key', 'raw/2m Sales Records.csv',
-        '--output_prefix', s3_prefix_converted
-    ]
+    inputs=[spark_input],
+    outputs=[spark_output],
+    code="convert.py",
+    job_arguments=['--s3_bucket', s3_bucket, '--input_key', 'raw/2m Sales Records.csv', '--output_prefix', s3_prefix_converted],
+    depends_on=[unzip_data_step.name]
 )
 
-# Athena Processing Step - Depends on SparkProcessingStep
+athena_input = ProcessingInput(
+    source=spark_output.destination,  # This ensures the input matches the previous output exactly
+    destination="/opt/ml/processing/input"
+)
+
 athena_processing_step = ProcessingStep(
     name="RunAthenaQuery",
     processor=athena_processor,
-    code='athena.py'
+    inputs=[athena_input],
+    code='athena.py',
+    depends_on=[spark_step.name]
 )
-
 
 pipeline = Pipeline(
     name="DataProcessingPipeline",
@@ -120,4 +149,4 @@ pipeline_definition = pipeline.definition()
 pipeline.upsert(role_arn=role)
 
 
-pipeline.start(execution_display_name="debug-execution")
+pipeline.start()

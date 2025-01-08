@@ -1,6 +1,9 @@
 import argparse
 import boto3
 from io import BytesIO
+import subprocess
+import sys
+subprocess.check_call([sys.executable, "-m", "pip", "install", "findspark"])
 import findspark
 findspark.init()
 import pyspark

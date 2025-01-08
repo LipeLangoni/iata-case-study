@@ -22,33 +22,19 @@ resource "aws_iam_policy" "sagemaker_policy" {
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
-      # Existing permissions
+      # Full SageMaker permissions for testing
       {
         Effect = "Allow",
         Action = [
+          "sagemaker:*",
           "s3:*",
           "glue:*",
           "athena:*",
-          "sagemaker:AddTags",
-          "sagemaker:CreateProcessingJob"
-        ],
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Action = "iam:PassRole",
-        Resource = [
-          "arn:aws:iam::995227787260:role/sagemaker_execution_role",
-          "arn:aws:iam::995227787260:role/sagemaker-pipeline-*"
-        ]
-      },
-      {
-        Effect = "Allow",
-        Action = [
           "ecr:GetAuthorizationToken",
           "ecr:BatchCheckLayerAvailability",
           "ecr:BatchGetImage",
-          "ecr:GetDownloadUrlForLayer"
+          "ecr:GetDownloadUrlForLayer",
+          "iam:PassRole"
         ],
         Resource = "*"
       }
